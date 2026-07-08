@@ -1,3 +1,4 @@
+
 import json
 from decimal import Decimal
  
@@ -6,15 +7,10 @@ import ta
  
 from client import Client
  
-MARGE_SECURITE_FRAIS = Decimal("0.999")  # laisse 0.1% de marge pour les frais
+MARGE_SECURITE_FRAIS = Decimal("0.999")
  
  
 def update_balance(client, order):
-    """
-    Met à jour client.usdt et client.solde_crypto à partir du résultat
-    d'un ordre exécuté. La comparaison des frais se fait dynamiquement
-    contre client.crypto (ex: "BTC" ou "ETH"), plus jamais en dur.
-    """
     executed_qty = Decimal(str(order["executedQty"]))
     quote_qty = Decimal(str(order["cummulativeQuoteQty"]))
  
@@ -32,7 +28,6 @@ def update_balance(client, order):
         client.usdt -= float(frais_usdt)
         client.solde_crypto += float(executed_qty)
         client.solde_crypto -= float(frais_crypto)
- 
     elif order["side"] == "SELL":
         client.solde_crypto -= float(executed_qty)
         client.solde_crypto -= float(frais_crypto)
@@ -44,16 +39,17 @@ def update_balance(client, order):
  
  
 def save_order(order, path="transactions.jsonl"):
+    """
+    JSON Lines : un objet JSON complet par ligne. Chaque ligne correspond
+    exactement à une future ligne de table SQL FAIT_SIGNAL_TRADING — c'est
+    ce format qui permet de migrer vers SQL plus tard sans rien changer à
+    la structure des données elles-mêmes (voir weekly_metrics.py).
+    """
     with open(path, "a") as f:
         f.write(json.dumps(order) + "\n")
  
  
 def trade(symbol, client):
-    """
-    symbol : ex. "BTCUSDT" — doit correspondre à client.crypto
-    client : instance de Client déjà créée (nom, montant, crypto choisis
-             une seule fois au démarrage, pas à chaque appel de trade())
-    """
     data = get_historical_data(symbol, "1h", 650)
     df = pd.DataFrame(data)
  
@@ -71,7 +67,7 @@ def trade(symbol, client):
         update_balance(client, order)
  
     elif client.solde_crypto > 0.0001 and signal_vente:
-        quantity = client.solde_crypto  # on vend exactement ce qu'on possède
+        quantity = client.solde_crypto
         order = client.buy_or_sell("SELL", symbol, df, quantity)
         update_balance(client, order)
  
@@ -82,6 +78,7 @@ def trade(symbol, client):
  
  
 if __name__ == "__main__":
-    client = Client()  # demande nom, montant, crypto une seule fois
+    client = Client()
     symbol = f"{client.crypto}USDT"
     trade(symbol, client)
+ 

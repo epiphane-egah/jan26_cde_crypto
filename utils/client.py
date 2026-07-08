@@ -7,7 +7,6 @@ CRYPTOS_DISPONIBLES = ["BTC", "ETH"]
  
  
 def demander_informations_client():
-    """Demande interactivement le nom, le montant à investir et la crypto."""
     nom = input("Nom du client (laisser vide pour un nom aléatoire) : ").strip()
     if not nom:
         nom = Faker("fr_FR").name()
@@ -34,22 +33,13 @@ def demander_informations_client():
  
 class Client:
     def __init__(self, name=None, usdt=None, crypto=None, save_path=None):
-        """
-        Deux façons de créer un client :
- 
-        1. Interactif :  Client()
-           -> demande le nom, le montant et la crypto via input()
- 
-        2. Programmatique (utile pour les tests / plusieurs bots automatisés) :
-           Client(name="Alice", usdt=1000, crypto="BTC")
-        """
         if name is None or usdt is None or crypto is None:
             name, usdt, crypto = demander_informations_client()
  
         if crypto not in CRYPTOS_DISPONIBLES:
             raise ValueError(f"Crypto non supportée : {crypto!r}")
  
-        self.crypto = crypto  # ex: "BTC" — quelle crypto ce client trade
+        self.crypto = crypto
  
         if save_path is None:
             nom_fichier = name.replace(" ", "_")
@@ -62,8 +52,11 @@ class Client:
                   f"({self.usdt:.2f} USDT / {self.solde_crypto:.6f} {self.crypto})")
         else:
             self.usdt = float(usdt)
-            self.solde_crypto = 0.0  # nom générique, valable pour BTC, ETH, etc.
+            self.solde_crypto = 0.0
             self.name = name
+            # Mémorise l'orderId du dernier BUY non encore fermé par un SELL.
+            # None = pas de position ouverte actuellement.
+            self.id_ordre_ouverture_courant = None
             self.save()
             print(f"Nouveau client créé : {self.name} -> {self.save_path}")
  
@@ -81,6 +74,16 @@ class Client:
             client_order_id=f"bot_{self.name}",
             quantite=quantite,
         )
+ 
+        # Option A : on relie explicitement chaque SELL à l'ordre d'ouverture
+        # correspondant, et on met à jour l'état pour le prochain appel.
+        if order_type == "BUY":
+            self.id_ordre_ouverture_courant = ordre["orderId"]
+        elif order_type == "SELL":
+            ordre["id_ordre_ouverture"] = self.id_ordre_ouverture_courant
+            self.id_ordre_ouverture_courant = None  # position refermée
+ 
+        self.save()
         return ordre
  
     def save(self):
@@ -91,6 +94,7 @@ class Client:
                     "solde_crypto": self.solde_crypto,
                     "crypto": self.crypto,
                     "name": self.name,
+                    "id_ordre_ouverture_courant": self.id_ordre_ouverture_courant,
                 },
                 f,
                 indent=2,
@@ -103,6 +107,7 @@ class Client:
         self.solde_crypto = data["solde_crypto"]
         self.name = data["name"]
         self.crypto = data.get("crypto", self.crypto)
+        self.id_ordre_ouverture_courant = data.get("id_ordre_ouverture_courant")
  
  
 if __name__ == "__main__":
